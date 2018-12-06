@@ -10,7 +10,8 @@ import (
 
 func TestSecureRedirectMiddleware(t *testing.T) {
 	api := rest.NewApi()
-	api.Use(&SecureRedirectMiddleware{})
+	srm := NewSecureRedirectMiddleware("/health")
+	api.Use(&srm)
 	api.SetApp(rest.AppSimple(func(w rest.ResponseWriter, r *rest.Request) {
 		w.WriteJson(map[string]string{"Id": "123"})
 	}))
@@ -26,4 +27,17 @@ func TestSecureRedirectMiddleware(t *testing.T) {
 	recorded = test.RunRequest(t, handler, req)
 	recorded.CodeIs(http.StatusOK)
 	recorded.BodyIs(`{"Id":"123"}`)
+
+	// white-listed paths are not redirected
+	req = test.MakeSimpleRequest("GET", "http://localhost/health", nil)
+	req.Header.Set("X-Forwarded-Proto", "HtTp")
+	recorded = test.RunRequest(t, handler, req)
+	recorded.CodeIs(http.StatusOK)
+
+	// white-listed paths are case-sensitive
+	req = test.MakeSimpleRequest("GET", "http://localhost/heAlth", nil)
+	req.Header.Set("X-Forwarded-Proto", "HtTp")
+	recorded = test.RunRequest(t, handler, req)
+	recorded.CodeIs(http.StatusMovedPermanently)
+	recorded.HeaderIs("Location", "https://localhost/heAlth")
 }
